@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # Time-series database for network metrics
+  influxdb:
+    image: influxdb:2.7
+    container_name: p4monitor-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password
+      - DOCKER_INFLUXDB_INIT_ORG=p4monitor
+      - DOCKER_INFLUXDB_INIT_BUCKET=network_metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb2
+    restart: unless-stopped
+
+  # Relational database for metadata and configuration
+  postgres:
+    image: postgres:15
+    container_name: p4monitor-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=p4monitor
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+  # Redis for real-time caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: p4monitor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # Control plane application
+  control-plane:
+    build: 
+      context: ./control_plane
+      dockerfile: Dockerfile
+    container_name: p4monitor-controller
+    ports:
+      - "8000:8000"
+      - "50051:50051"
+    depends_on:
+      - influxdb
+      - postgres
+      - redis
+    environment:
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=my-super-secret-auth-token
+      - INFLUXDB_ORG=p4monitor
+      - INFLUXDB_BUCKET=network_metrics
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=p4monitor
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./control_plane:/app
+      - ./p4src:/app/p4src
+    restart: unless-stopped
+
+  # Dashboard frontend
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: p4monitor-dashboard
+    ports:
+      - "3000:80"
+    depends_on:
+      - control-plane
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000/ws
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+volumes:
+  influxdb_data:
+  influxdb_config:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: p4monitor-network

@@ -1,0 +1,522 @@
+# P4-Based Network Monitoring Tool: Technical Specifications & Functional Requirements
+
+## System Architecture Overview
+
+### Core Components
+1. **P4 Data Plane Program** - Packet processing and feature extraction
+2. **Control Plane Application** - Switch management and data collection  
+3. **Data Storage Layer** - Time-series and metadata storage
+4. **Dashboard/Visualization** - Real-time monitoring interface
+5. **Configuration Management** - Policy and rule management
+
+---
+
+## P4 Data Plane Specifications
+
+### Traffic Feature Extraction
+
+#### Packet-Level Features
+- **Packet size** (header + payload length)
+- **Protocol identification** (TCP/UDP/ICMP/others)
+- **5-tuple flow identification** (src_ip, dst_ip, src_port, dst_port, protocol)
+- **TCP flags analysis** (SYN, ACK, FIN, RST patterns)
+- **Time-to-Live (TTL)** values
+- **DSCP/ToS markings** for QoS analysis
+- **VLAN tagging** information
+
+#### Flow-Level Aggregations
+- **Flow duration tracking** (first-to-last packet timestamps)
+- **Packet/byte counters** per flow
+- **Inter-packet arrival time** statistics
+- **Bidirectional flow** characteristics
+- **Flow rate calculations** (packets/sec, bytes/sec)
+
+#### Statistical Computations
+- Protocol distribution percentages
+- Packet size histograms
+- Port usage patterns
+- Traffic volume trends
+
+### P4 Program Architecture
+
+#### Parser Design
+- **Multi-protocol header parsing** (Ethernet → IPv4/IPv6 → TCP/UDP)
+- **Variable-length header handling**
+- **Tunneling protocol support** (GRE, VXLAN)
+- **Robust error handling** for malformed packets
+
+#### Ingress Pipeline
+- **Flow classification** using exact-match tables
+- **Register-based flow state management**
+- **Real-time counter updates**
+- **Sampling logic** for high-traffic scenarios
+- **Timestamp recording** with microsecond precision
+
+#### Match-Action Tables
+- **Flow identification table** (5-tuple matching)
+- **Feature extraction rules** (configurable per-flow policies)
+- **Sampling configuration** (adaptive sampling rates)
+- **Export triggers** (threshold-based data transmission)
+
+#### Data Export Mechanisms
+- **Digest messages** for real-time feature streaming
+- **Counter polling** for periodic statistics
+- **Packet cloning** for detailed analysis
+- **Mirror port integration** for external tools
+
+---
+
+## Control Plane Application
+
+### Core Functionalities
+
+#### Switch Management
+- **P4Runtime client implementation** for gRPC communication
+- **Dynamic P4 program deployment** and updates
+- **Table entry lifecycle management**
+- **Switch discovery and health monitoring**
+
+#### Data Collection Engine
+- **Multi-threaded digest message processing**
+- **Configurable counter polling intervals**
+- **Flow timeout detection and cleanup**
+- **Data validation and error handling**
+- **Backpressure management** for high-load scenarios
+
+#### Feature Processing
+- **Real-time aggregation** (per-flow, per-port, per-time-window)
+- **Statistical computation** (averages, percentiles, variance)
+- **Time-series data structuring**
+- **Data normalization and standardization**
+
+### Configuration Management
+- **JSON/YAML-based policy definition**
+- **Dynamic feature selection** (runtime reconfiguration)
+- **Adaptive sampling rate adjustment**
+- **Export interval optimization**
+- **Alert threshold management**
+
+---
+
+## Data Storage Architecture
+
+### Multi-Tier Storage Strategy
+
+#### Time-Series Database (Primary)
+- **InfluxDB/TimescaleDB** for traffic metrics
+- **Optimized for high-throughput writes**
+- **Automatic data retention policies**
+- **Efficient time-range queries**
+
+#### Relational Database (Metadata)
+- **PostgreSQL** for configuration and switch information
+- **ACID compliance** for critical data
+- **Advanced querying capabilities**
+
+#### In-Memory Cache (Real-time)
+- **Redis** for dashboard real-time updates
+- **Recent statistics caching**
+- **Session and user state management**
+
+### Data Schema Design
+
+#### Raw Features Table
+```sql
+CREATE TABLE network_flows (
+    timestamp TIMESTAMPTZ NOT NULL,
+    switch_id VARCHAR(50) NOT NULL,
+    flow_id VARCHAR(100) NOT NULL,
+    src_ip INET NOT NULL,
+    dst_ip INET NOT NULL,
+    src_port INTEGER,
+    dst_port INTEGER,
+    protocol INTEGER NOT NULL,
+    packet_count BIGINT DEFAULT 0,
+    byte_count BIGINT DEFAULT 0,
+    duration_ms BIGINT DEFAULT 0,
+    tcp_flags INTEGER DEFAULT 0,
+    packet_size_avg FLOAT DEFAULT 0,
+    INDEX(timestamp, switch_id),
+    INDEX(flow_id)
+);
+```
+
+#### Aggregated Statistics
+- **1-minute, 5-minute, 1-hour, 24-hour summaries**
+- **Per-switch aggregate metrics**
+- **Protocol and port distribution tables**
+
+### Data Management
+- **Automatic partitioning** by time and switch
+- **Compression** for historical data
+- **Configurable retention periods**
+- **Backup and disaster recovery procedures**
+
+---
+
+## Dashboard & Visualization
+
+### Real-Time Monitoring Views
+
+#### Traffic Overview
+- **Live bandwidth utilization graphs**
+- **Protocol distribution pie charts**
+- **Geographic traffic flow maps**
+- **Top talkers identification** (IPs, ports, protocols)
+
+#### Flow Analysis
+- **Flow duration histograms**
+- **Packet size distribution graphs**
+- **Inter-arrival time analysis**
+- **Bidirectional flow correlations**
+
+#### Network Health
+- **Switch status indicators**
+- **Link utilization monitoring**
+- **Error rate tracking**
+- **Performance anomaly highlighting**
+
+### Historical Analysis
+- **Configurable time range selection** (minutes to months)
+- **Trend analysis** with pattern recognition
+- **Comparative analysis** (current vs. historical)
+- **Drill-down** from aggregate to packet-level details
+
+### Interactive Features
+- **Real-time updates** via WebSocket connections
+- **Customizable dashboard layouts**
+- **Export capabilities** (CSV, PDF, PNG)
+- **Advanced filtering and search**
+- **Alert management interface**
+
+---
+
+## Performance & Scalability Requirements
+
+### Processing Capabilities
+- **Throughput:** 10,000+ flows per second per switch
+- **Latency:** <100ms for real-time data updates
+- **Concurrency:** Support 10+ switches simultaneously
+- **Memory:** Efficient flow state management (millions of concurrent flows)
+
+### Network Requirements
+- **Management Bandwidth:** 1-10 Mbps per switch for monitoring data
+- **Control Channel:** Dedicated management network recommended
+- **Protocol Support:** P4Runtime, gRPC, REST APIs
+- **Discovery:** Automatic switch detection and configuration
+
+### System Scalability
+- **Horizontal scaling** through microservices architecture
+- **Load balancing** for high availability
+- **Database sharding** for large deployments
+- **Configurable resource allocation**
+
+---
+
+## Development & Deployment Stack
+
+### Simulation Environment (Primary Development)
+- **Network Simulation:** Mininet (Python-based network emulator)
+- **P4 Software Switch:** BMv2 (Behavioral Model v2) - software implementation of P4
+- **P4 Compiler:** p4c (official P4 compiler)
+- **P4 Runtime:** P4Runtime API for switch control
+- **Traffic Generation:** Scapy, hping3, iperf3 for testing
+
+### Development Environment
+- **Operating System:** Ubuntu 20.04+ LTS (recommended for P4 tools)
+- **Containerization:** Docker + Docker Compose for service orchestration
+- **Version Control:** Git with automated CI/CD pipeline
+- **Testing:** Comprehensive unit, integration, and performance tests
+
+### Technology Stack
+
+#### P4 Development Tools
+- **P4 Language:** P4_16 (latest specification)
+- **Compiler:** p4c (open-source P4 compiler)
+- **Target:** BMv2 simple_switch_grpc for simulation
+- **Runtime API:** P4Runtime (gRPC-based)
+- **Debugger:** P4 behavioral model debugger
+
+#### Control Plane Development
+- **Programming Language:** Python 3.8+ 
+- **P4Runtime Client:** p4runtime-sh or custom gRPC client
+- **Framework:** FastAPI or Flask for REST APIs
+- **Async Processing:** asyncio for concurrent operations
+- **Configuration:** YAML/JSON config files
+
+#### Database Stack
+- **Time-Series DB:** InfluxDB 2.x (primary metrics storage)
+- **Relational DB:** PostgreSQL 13+ (metadata and configuration)
+- **Cache:** Redis 6+ (real-time data and sessions)
+- **ORM:** SQLAlchemy (Python database toolkit)
+
+#### Frontend/Dashboard
+- **Framework:** React.js 18+ or Vue.js 3+
+- **Real-time Updates:** WebSocket (Socket.io)
+- **Charts:** Chart.js, D3.js, or Recharts
+- **UI Library:** Material-UI, Ant Design, or Tailwind CSS
+- **Build Tool:** Vite or Create React App
+
+#### Development Infrastructure
+- **Containerization:** Docker + Docker Compose
+- **Process Management:** systemd or Docker containers
+- **Monitoring:** Prometheus + Grafana (system metrics)
+- **Logging:** Python logging + ELK stack (optional)
+- **Testing:** pytest, Jest, Cypress for E2E testing
+
+#### Network Tools
+- **Traffic Generation:** Scapy (Python packet crafting)
+- **Performance Testing:** iperf3, netperf
+- **Packet Analysis:** Wireshark, tcpdump
+- **Network Emulation:** Mininet, Containernet
+
+### Simulation vs Physical Hardware
+- **Development Phase:** 100% simulation using BMv2 software switches
+- **Testing Phase:** Mininet topologies with multiple simulated switches
+- **Production Phase:** Can be deployed on physical P4 switches (Tofino, etc.)
+- **Hardware Requirements:** Standard Linux development machine (8GB+ RAM)
+
+---
+
+## Practical Setup Guide
+
+### 1. Environment Setup (Ubuntu 20.04+ recommended)
+
+#### Install P4 Development Tools
+```bash
+# Install dependencies
+sudo apt update
+sudo apt install -y git cmake g++ python3 python3-pip \
+    python3-setuptools python3-dev libgmp-dev libboost-dev \
+    libboost-program-options-dev libssl-dev
+
+# Install P4 compiler (p4c)
+git clone --recursive https://github.com/p4lang/p4c.git
+cd p4c && mkdir build && cd build
+cmake .. && make -j$(nproc) && sudo make install
+
+# Install BMv2 (behavioral model)
+git clone https://github.com/p4lang/behavioral-model.git
+cd behavioral-model
+./install_deps.sh && ./autogen.sh
+./configure && make -j$(nproc) && sudo make install
+```
+
+#### Install Mininet
+```bash
+git clone https://github.com/mininet/mininet
+cd mininet
+util/install.sh -nwv
+```
+
+#### Install Python Dependencies
+```bash
+pip3 install p4runtime-sh scapy mininet grpcio grpcio-tools \
+    psutil influxdb-client psycopg2-binary redis fastapi uvicorn \
+    pydantic sqlalchemy alembic pytest
+```
+
+### 2. Project Structure
+```
+p4-network-monitor/
+├── p4src/                    # P4 programs
+│   ├── monitor.p4           # Main monitoring program
+│   └── includes/            # Header definitions
+├── control_plane/           # Python control applications
+│   ├── controller.py        # Main P4Runtime controller
+│   ├── data_collector.py    # Data collection service
+│   └── api_server.py        # REST API server
+├── dashboard/               # Frontend application
+│   ├── src/                 # React/Vue source code
+│   └── public/              # Static assets
+├── database/                # Database schemas and migrations
+├── docker/                  # Docker configurations
+├── mininet/                 # Network topologies
+│   └── topology.py          # Mininet network setup
+├── tests/                   # Test suites
+└── scripts/                 # Utility scripts
+```
+
+### 3. Docker Development Environment
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  influxdb:
+    image: influxdb:2.7
+    ports: ["8086:8086"]
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password
+      - DOCKER_INFLUXDB_INIT_ORG=p4monitor
+      - DOCKER_INFLUXDB_INIT_BUCKET=network_metrics
+
+  postgres:
+    image: postgres:15
+    ports: ["5432:5432"]
+    environment:
+      - POSTGRES_DB=p4monitor
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  control-plane:
+    build: ./control_plane
+    depends_on: [influxdb, postgres, redis]
+    network_mode: host  # Required for Mininet access
+
+  dashboard:
+    build: ./dashboard
+    ports: ["3000:3000"]
+    depends_on: [control-plane]
+```
+
+### 4. Quick Start Commands
+```bash
+# 1. Start infrastructure services
+docker-compose up -d influxdb postgres redis
+
+# 2. Compile P4 program
+p4c --target bmv2 --arch v1model p4src/monitor.p4 -o build/
+
+# 3. Start Mininet topology with P4 switches
+sudo python3 mininet/topology.py
+
+# 4. Run control plane application
+python3 control_plane/controller.py
+
+# 5. Start dashboard (in separate terminal)
+cd dashboard && npm start
+```
+
+### 5. Development Workflow
+1. **P4 Development:** Write/modify P4 programs → Compile → Test in Mininet
+2. **Control Plane:** Develop Python services → Test with simulated switches
+3. **Frontend:** Create dashboard components → Connect to backend APIs
+4. **Integration:** Test end-to-end functionality → Performance evaluation
+5. **Documentation:** Write research papers → Prepare publication materials
+
+### 6. Testing Strategy
+- **Unit Tests:** Individual P4 functions, Python modules
+- **Integration Tests:** P4 + Control plane interaction
+- **System Tests:** Full pipeline with multiple switches
+- **Performance Tests:** Throughput, latency, resource usage
+- **Simulation Tests:** Various network topologies and traffic patterns
+
+### Phase 1: Foundation (Weeks 1-4)
+- **P4 development environment setup**
+- **Basic packet parsing and feature extraction**
+- **Simple control plane application**
+- **Local database integration**
+
+### Phase 2: Core Features (Weeks 5-8)
+- **Flow state management implementation**
+- **Real-time data collection**
+- **Basic dashboard development**
+- **Performance optimization**
+
+### Phase 3: Advanced Features (Weeks 9-12)
+- **Multi-switch support**
+- **Advanced visualizations**
+- **Alert system implementation**
+- **Comprehensive testing**
+
+### Phase 4: Integration & Documentation (Weeks 13-16)
+- **System integration testing**
+- **Performance benchmarking**
+- **Documentation completion**
+- **Research paper preparation**
+
+---
+
+## Technical Challenges & Solutions
+
+### P4 Constraints
+**Challenge:** Limited computational capabilities in data plane
+**Solution:** Optimize feature extraction algorithms, use registers efficiently
+
+**Challenge:** No floating-point arithmetic support
+**Solution:** Integer-based calculations with appropriate scaling
+
+### Scalability Issues
+**Challenge:** High memory usage for flow tracking
+**Solution:** Implement flow aging policies and efficient data structures
+
+**Challenge:** Network bandwidth for monitoring data
+**Solution:** Adaptive sampling and data compression techniques
+
+### Real-time Requirements
+**Challenge:** Low-latency data processing
+**Solution:** Asynchronous processing, efficient data pipelines
+
+**Challenge:** Dashboard responsiveness
+**Solution:** WebSocket connections, client-side caching
+
+---
+
+## Research Contributions
+
+### Novel Aspects
+- **Lightweight feature extraction** directly in P4 data plane
+- **Real-time flow analytics** with minimal overhead
+- **Scalable monitoring architecture** for multiple switches
+- **Integration of statistical computing** with packet processing
+
+### Evaluation Metrics
+- **Feature extraction latency** vs. traditional methods
+- **Memory utilization** efficiency in P4 switches
+- **Network overhead** analysis
+- **Scalability limits** with increasing switch count
+
+### Comparison Baselines
+- **Traditional SNMP-based monitoring**
+- **sFlow/NetFlow collection systems**
+- **Software-based traffic analysis tools**
+- **Commercial network monitoring solutions**
+
+---
+
+## Documentation & Deliverables
+
+### Technical Documentation
+- **System architecture document** with detailed component diagrams
+- **P4 program specification** and API documentation
+- **Database schema** and data flow documentation
+- **Deployment and configuration guides**
+- **User manual** for dashboard operation
+
+### Research Output
+- **Performance evaluation report**
+- **Scalability analysis document**
+- **Comparison study** with existing tools
+- **Conference poster** and presentation materials
+- **Workshop/conference paper** submission
+
+### Open Source Package
+- **Complete source code** with Apache/MIT license
+- **Docker-based deployment** scripts
+- **Sample network topologies** and test data
+- **Automated testing suite**
+- **Performance benchmarking tools**
+
+---
+
+## Future Extensions
+
+### Advanced Features
+- **Machine learning integration** for anomaly detection
+- **Encrypted traffic analysis** capabilities
+- **Multi-tenant monitoring** support
+- **SIEM system integration**
+
+### Research Directions
+- **AI-driven feature selection** optimization
+- **Federated learning** integration (PhD03 connection)
+- **Cross-layer correlation** analysis
+- **Predictive network analytics**
+
+This comprehensive specification provides the technical foundation for building a research-grade P4-based network monitoring tool that contributes to both practical network management and academic research in programmable networks.
