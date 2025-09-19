@@ -23,12 +23,13 @@ A research-grade network monitoring system that leverages P4 programmable switch
 
 ## Quick Start
 
-1. Install dependencies (see setup documentation)
-2. Start infrastructure services: `docker compose up -d`
-3. Compile P4 program: `p4c --target bmv2 --arch v1model p4src/monitor.p4`
-4. Run Mininet topology: `sudo python3 mininet/topology.py`
-5. Start control plane: `python3 control_plane/controller.py`
-6. Access dashboard: http://localhost:3000
+1. Clone repository: `git clone https://github.com/tryptoph/p4-network-monitor.git`
+2. Install dependencies: `bash scripts/setup.sh`
+3. Start infrastructure services: `docker compose up -d`
+4. Compile P4 program: `bash scripts/compile_p4.sh`
+5. Run Mininet topology: `sudo python3 mininet/topology.py`
+6. Start control plane: `python3 control_plane/controller.py`
+7. Access dashboard: http://localhost:3000
 
 ## Development Phases
 
